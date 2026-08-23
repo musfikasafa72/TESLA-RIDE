@@ -1,117 +1,122 @@
 #include "iGraphics.h"
+#include <windows.h>
 #include <stdlib.h>
 #include <math.h>
-#include <windows.h>
-#include <mmsystem.h>
 
-int WIDTH = 900;
-int HEIGHT = 600;
+#define SCREEN_WIDTH 900
+#define SCREEN_HEIGHT 600
 
-int HORIZON_Y = 380;   // Where road meets sky
+int horizonY = 380;
+float lineOffset = 0.0f;
 
-// Auto-rickshaw position and horizontal speed
-float rickshawX = 450;
-float rickshawY = 30;   // Fixed vertical position for driving view
-float moveSpeedX = 6.0;
+// REDUCED: Road scrolling speed for a slower pace
+float scrollSpeed = 0.007f;
 
-// Dynamic motion control
-float roadOffset = 0.0;
-float roadSpeed = 7.0;  // Speed of background elements moving
+// Game State: 0 = Playing, 1 = Game Over
+int gameState = 0;
+
+// Driving flag: track if player started moving
+int isDriving = 0;
+
+// Rickshaw Animation & Position
+char rickshaw[8][15] = { "char\\R1.bmp", "char\\R2.bmp", "char\\R3.bmp", "char\\R4.bmp", "char\\R5.bmp", "char\\R6.bmp", "char\\R7.bmp", "char\\R8.bmp" };
+int rickshawCordinateX = 425;
+int rickshawCordinateY = 10;
+int rickshawIndex = 0;
+
+// ==========================================
+// Adjustable Dimensions & Scaling Settings
+// ==========================================
+int rickshawWidth = 60;
+int rickshawHeight = 75;
+
+int obstacleWidth = 75;
+int obstacleHeight = 85;
+
+float minObstacleScale = 0.70f;
+float maxObstacleScale = 1.15f;
+
+// ---------- Obstacle System ----------
+#define MAX_OBSTACLES 3
+
+typedef struct {
+	float x;
+	float y;
+	float speed;
+	int type; // 0: Yellow Taxi, 1: White Van
+	int active;
+} Obstacle;
+
+Obstacle obstacles[MAX_OBSTACLES];
+int obstacleSpawnTimer = 0;
 
 // ---------- Helper Functions ----------
-float getRoadWidthAtY(float y)
-{
-	float t = (y - 0) / (float)HORIZON_Y;
-	return (1.0f - t) * WIDTH + t * 400.0f;
+float getObstacleScale(float y) {
+	float progress = (float)(horizonY - y) / (float)horizonY;
+	if (progress < 0.0f) progress = 0.0f;
+	if (progress > 1.0f) progress = 1.0f;
+	return minObstacleScale + (maxObstacleScale - minObstacleScale) * progress;
 }
 
-// ---------- Audio Control (MCI API - Error Free) ----------
-void startEngineSound()
-{
-	// Opens and plays engine.wav (or engine.mp3) in a loop
-	mciSendString("open \"engine.wav\" type waveaudio alias bg_audio", NULL, 0, NULL);
-	mciSendString("play bg_audio repeat", NULL, 0, NULL);
+void resetObstacle(int index) {
+	obstacles[index].y = (float)horizonY;
+
+	// Tighter horizontal spawn range near horizon (X = 400 to 500)
+	obstacles[index].x = 400.0f + (rand() % 100);
+
+	// Obstacle speed (1.0 - 2.0)
+	obstacles[index].speed = 1.0f + (rand() % 50) / 50.0f;
+
+	obstacles[index].type = rand() % 2;
+	obstacles[index].active = 0;
 }
 
-void stopEngineSound()
-{
-	mciSendString("stop bg_audio", NULL, 0, NULL);
-	mciSendString("close bg_audio", NULL, 0, NULL);
-}
-
-// ---------- Background ----------
-void drawSky()
-{
-	iSetColor(135, 206, 235);
-	iFilledRectangle(0, HORIZON_Y, WIDTH, HEIGHT - HORIZON_Y);
-
-	// Sun
-	iSetColor(255, 223, 0);
-	iFilledCircle(760, 540, 35);
-
-	// Clouds
-	iSetColor(255, 255, 255);
-	iFilledCircle(150, 500, 20);
-	iFilledCircle(175, 505, 25);
-	iFilledCircle(200, 500, 18);
-
-	iFilledCircle(550, 470, 15);
-	iFilledCircle(570, 475, 20);
-	iFilledCircle(590, 470, 14);
-}
-
-void drawGrassGround()
-{
-	iSetColor(102, 178, 60);
-	iFilledRectangle(0, 0, WIDTH, HORIZON_Y);
-}
-
-void drawRoad()
-{
-	// Trapezoid Road
-	iSetColor(70, 70, 70);
-	double roadX[4] = { 250, 650, WIDTH, 0 };
-	double roadY[4] = { HORIZON_Y, HORIZON_Y, 0, 0 };
-	iFilledPolygon(roadX, roadY, 4);
-
-	// Curbs
-	iSetColor(230, 230, 230);
-	double curbL_x[4] = { 250, 260, 15, 0 };
-	double curbL_y[4] = { HORIZON_Y, HORIZON_Y, 0, 0 };
-	iFilledPolygon(curbL_x, curbL_y, 4);
-
-	double curbR_x[4] = { 650, 640, WIDTH - 15, WIDTH };
-	double curbR_y[4] = { HORIZON_Y, HORIZON_Y, 0, 0 };
-	iFilledPolygon(curbR_x, curbR_y, 4);
-
-	// Center Dashed Line
-	iSetColor(255, 255, 255);
-	for (int i = 0; i < 10; i++)
-	{
-		float t = fmod((i / 8.0f) - (roadOffset / 300.0f), 1.0f);
-		if (t < 0) t += 1.0f;
-
-		int lineY = (int)(20 + t * (HORIZON_Y - 50));
-		int lineW = (int)(18 - t * 14);
-		int lineH = (int)(18 - t * 12);
-		if (lineW < 3) lineW = 3;
-		if (lineH < 3) lineH = 3;
-
-		iFilledRectangle(WIDTH / 2 - lineW / 2, lineY, lineW, lineH);
+void initObstacles() {
+	for (int i = 0; i < MAX_OBSTACLES; i++) {
+		resetObstacle(i);
 	}
+	obstacleSpawnTimer = 0;
 }
 
-void drawSideBuildings()
-{
-	for (int i = 0; i < 5; i++)
-	{
-		float progress = fmod(i * 0.2f + (roadOffset / 400.0f), 1.0f);
+void resetGame() {
+	rickshawCordinateX = 425;
+	rickshawCordinateY = 10;
+	lineOffset = 0.0f;
+	isDriving = 0;
+	initObstacles();
+	gameState = 0;
+}
+
+// REALISTIC FULL-SURFACE COLLISION DETECTION
+// Strict Axis-Aligned Bounding Box (AABB) overlap check without margin padding
+int checkCollision(float rX, float rY, float rW, float rH, float oX, float oY, float oW, float oH) {
+	float rLeft = rX;
+	float rRight = rX + rW;
+	float rBottom = rY;
+	float rTop = rY + rH;
+
+	float oLeft = oX;
+	float oRight = oX + oW;
+	float oBottom = oY;
+	float oTop = oY + oH;
+
+	// Triggers if ANY part of the bounding boxes overlap
+	if (rRight >= oLeft && rLeft <= oRight && rTop >= oBottom && rBottom <= oTop) {
+		return 1;
+	}
+	return 0;
+}
+
+// ---------- Visual Elements ----------
+void drawSideBuildings() {
+	for (int i = 0; i < 5; i++) {
+		float progress = fmod(i * 0.2f + lineOffset, 1.0f);
 		if (progress < 0) progress += 1.0f;
 
-		int bw = 60 - progress * 35;
-		int bh = 180 - progress * 90;
-		int bx = 10 + progress * 160;
-		int by = 10 + progress * 300;
+		int bw = (int)(60 - progress * 35);
+		int bh = (int)(180 - progress * 90);
+		int bx = (int)(10 + progress * 160);
+		int by = (int)(10 + progress * 300);
 
 		iSetColor(180, 120, 90);
 		iFilledRectangle(bx, by, bw, bh);
@@ -120,24 +125,21 @@ void drawSideBuildings()
 		iFilledRectangle(bx, by + bh, bw, 6);
 
 		iSetColor(255, 230, 150);
-		for (int c = 0; c < bw / 18; c++)
-		{
-			for (int r = 0; r < bh / 25; r++)
-			{
+		for (int c = 0; c < bw / 18; c++) {
+			for (int r = 0; r < bh / 25; r++) {
 				iFilledRectangle(bx + 4 + c * 16, by + 5 + r * 22, 6, 10);
 			}
 		}
 	}
 
-	for (int i = 0; i < 5; i++)
-	{
-		float progress = fmod(i * 0.2f + (roadOffset / 400.0f), 1.0f);
+	for (int i = 0; i < 5; i++) {
+		float progress = fmod(i * 0.2f + lineOffset, 1.0f);
 		if (progress < 0) progress += 1.0f;
 
-		int bw = 60 - progress * 35;
-		int bh = 180 - progress * 90;
-		int bx = WIDTH - 10 - bw - progress * 160;
-		int by = 10 + progress * 300;
+		int bw = (int)(60 - progress * 35);
+		int bh = (int)(180 - progress * 90);
+		int bx = (int)(SCREEN_WIDTH - 10 - bw - progress * 160);
+		int by = (int)(10 + progress * 300);
 
 		iSetColor(170, 110, 85);
 		iFilledRectangle(bx, by, bw, bh);
@@ -146,36 +148,30 @@ void drawSideBuildings()
 		iFilledRectangle(bx, by + bh, bw, 6);
 
 		iSetColor(255, 230, 150);
-		for (int c = 0; c < bw / 18; c++)
-		{
-			for (int r = 0; r < bh / 25; r++)
-			{
+		for (int c = 0; c < bw / 18; c++) {
+			for (int r = 0; r < bh / 25; r++) {
 				iFilledRectangle(bx + 4 + c * 16, by + 5 + r * 22, 6, 10);
 			}
 		}
 	}
 }
 
-void drawSideTreesAndPoles()
-{
-	for (int i = 0; i < 5; i++)
-	{
-		float progress = fmod(i * 0.25f + (roadOffset / 300.0f), 1.0f);
+void drawSideTreesAndPoles() {
+	for (int i = 0; i < 5; i++) {
+		float progress = fmod(i * 0.25f + lineOffset, 1.0f);
 		if (progress < 0) progress += 1.0f;
 
-		int tx = 20 + progress * 200;
-		int ty = 20 + progress * 300;
-		int scale = (1.0f - progress) * 35 + 10;
+		int tx = (int)(20 + progress * 200);
+		int ty = (int)(20 + progress * 300);
+		int scale = (int)((1.0f - progress) * 35 + 10);
 
-		if (i % 2 == 0)
-		{
+		if (i % 2 == 0) {
 			iSetColor(101, 67, 33);
 			iFilledRectangle(tx - 3, ty, 6, scale);
 			iSetColor(34, 139, 34);
-			iFilledCircle(tx, ty + scale, scale * 0.7);
+			iFilledCircle(tx, ty + scale, (int)(scale * 0.7));
 		}
-		else
-		{
+		else {
 			iSetColor(90, 90, 90);
 			iFilledRectangle(tx - 2, ty, 4, scale + 15);
 			iSetColor(60, 60, 60);
@@ -183,24 +179,21 @@ void drawSideTreesAndPoles()
 		}
 	}
 
-	for (int i = 0; i < 5; i++)
-	{
-		float progress = fmod(i * 0.25f + (roadOffset / 300.0f), 1.0f);
+	for (int i = 0; i < 5; i++) {
+		float progress = fmod(i * 0.25f + lineOffset, 1.0f);
 		if (progress < 0) progress += 1.0f;
 
-		int tx = WIDTH - 20 - progress * 200;
-		int ty = 20 + progress * 300;
-		int scale = (1.0f - progress) * 35 + 10;
+		int tx = (int)(SCREEN_WIDTH - 20 - progress * 200);
+		int ty = (int)(20 + progress * 300);
+		int scale = (int)((1.0f - progress) * 35 + 10);
 
-		if (i % 2 == 0)
-		{
+		if (i % 2 == 0) {
 			iSetColor(101, 67, 33);
 			iFilledRectangle(tx - 3, ty, 6, scale);
 			iSetColor(34, 139, 34);
-			iFilledCircle(tx, ty + scale, scale * 0.7);
+			iFilledCircle(tx, ty + scale, (int)(scale * 0.7));
 		}
-		else
-		{
+		else {
 			iSetColor(90, 90, 90);
 			iFilledRectangle(tx - 2, ty, 4, scale + 15);
 			iSetColor(60, 60, 60);
@@ -209,119 +202,297 @@ void drawSideTreesAndPoles()
 	}
 }
 
-void drawBackground()
-{
-	drawSky();
-	drawGrassGround();
+// Yellow Taxi Drawing (Unchanged)
+void drawTaxi(int vx, int vy) {
+	int w = obstacleWidth;
+
+	iSetColor(30, 30, 30);
+	iFilledRectangle(vx + 6, vy, 12, 9);
+	iFilledRectangle(vx + w - 18, vy, 12, 9);
+
+	iSetColor(50, 50, 50);
+	iFilledRectangle(vx + 4, vy + 6, w - 8, 8);
+
+	iSetColor(250, 200, 0);
+	iFilledRectangle(vx + 4, vy + 14, w - 8, 25);
+
+	double roofX[] = { (double)vx + 4, (double)vx + 12, (double)vx + w - 12, (double)vx + w - 4 };
+	double roofY[] = { (double)vy + 39, (double)vy + 62, (double)vy + 62, (double)vy + 39 };
+	iFilledPolygon(roofX, roofY, 4);
+
+	iSetColor(40, 50, 65);
+	double glassX[] = { (double)vx + 8, (double)vx + 15, (double)vx + w - 15, (double)vx + w - 8 };
+	double glassY[] = { (double)vy + 41, (double)vy + 59, (double)vy + 59, (double)vy + 41 };
+	iFilledPolygon(glassX, glassY, 4);
+
+	for (int i = 0; i < 9; i++) {
+		if (i % 2 == 0) iSetColor(20, 20, 20);
+		else iSetColor(255, 255, 255);
+		iFilledRectangle(vx + 7 + (i * 6), vy + 33, 6, 6);
+	}
+
+	iSetColor(245, 245, 245);
+	iFilledRectangle(vx + 22, vy + 17, 20, 8);
+
+	iSetColor(220, 30, 30);
+	iFilledRectangle(vx + 6, vy + 22, 14, 7);
+	iFilledRectangle(vx + w - 20, vy + 22, 14, 7);
+
+	iSetColor(230, 180, 0);
+	iFilledRectangle(vx - 3, vy + 40, 5, 8);
+	iFilledRectangle(vx + w - 2, vy + 40, 5, 8);
+
+	iSetColor(240, 240, 240);
+	iFilledRectangle(vx + 23, vy + 62, 18, 7);
+	iSetColor(20, 20, 20);
+	iRectangle(vx + 23, vy + 62, 18, 7);
+}
+
+// White Van Drawing (Unchanged)
+void drawVan(int vx, int vy) {
+	int w = obstacleWidth;
+
+	iSetColor(30, 30, 30);
+	iFilledRectangle(vx + 7, vy, 10, 8);
+	iFilledRectangle(vx + w - 17, vy, 10, 8);
+
+	iSetColor(100, 105, 110);
+	iFilledRectangle(vx + 4, vy + 6, w - 8, 10);
+	iSetColor(40, 40, 40);
+	iFilledRectangle(vx + 12, vy + 9, 10, 3);
+	iFilledRectangle(vx + w - 22, vy + 9, 10, 3);
+
+	iSetColor(230, 230, 230);
+	iFilledRectangle(vx + 10, vy + 60, w - 20, 9);
+	iSetColor(180, 180, 180);
+	iRectangle(vx + 10, vy + 60, w - 20, 9);
+	iSetColor(60, 60, 60);
+	iFilledRectangle(vx + 7, vy + 57, 3, 6);
+	iFilledRectangle(vx + w - 10, vy + 57, 3, 6);
+
+	iSetColor(245, 245, 250);
+	iFilledRectangle(vx + 5, vy + 15, w - 10, 43);
+
+	iSetColor(200, 205, 210);
+	iRectangle(vx + 5, vy + 15, w - 10, 43);
+
+	iSetColor(70, 80, 90);
+	iFilledRectangle(vx + 9, vy + 37, 21, 16);
+	iFilledRectangle(vx + w - 30, vy + 37, 21, 16);
+
+	iSetColor(110, 125, 140);
+	iFilledRectangle(vx + 11, vy + 39, 17, 12);
+	iFilledRectangle(vx + w - 28, vy + 39, 17, 12);
+
+	iSetColor(140, 145, 150);
+	iFilledRectangle(vx + (w / 2), vy + 15, 2, 38);
+	iSetColor(50, 50, 50);
+	iFilledRectangle(vx + (w / 2) + 3, vy + 26, 3, 7);
+
+	iSetColor(240, 140, 0);
+	iFilledRectangle(vx + 1, vy + 22, 4, 14);
+	iFilledRectangle(vx + w - 5, vy + 22, 4, 14);
+
+	iSetColor(220, 40, 40);
+	iFilledRectangle(vx + 1, vy + 16, 4, 6);
+	iFilledRectangle(vx + w - 5, vy + 16, 4, 6);
+
+	iSetColor(70, 70, 70);
+	iFilledRectangle(vx - 3, vy + 37, 4, 7);
+	iFilledRectangle(vx + w - 1, vy + 37, 4, 7);
+}
+
+// Unchanged Drawing Router
+void drawObstacleVehicle(Obstacle obs) {
+	if (!obs.active) return;
+
+	if (obs.type == 0) {
+		drawTaxi((int)(obs.x - obstacleWidth / 2.0f), (int)obs.y);
+	}
+	else {
+		drawVan((int)(obs.x - obstacleWidth / 2.0f), (int)obs.y);
+	}
+}
+
+// Game Over Overlay
+void drawGameOverScreen() {
+	iSetColor(0, 0, 0);
+	iFilledRectangle(SCREEN_WIDTH / 2 - 200, SCREEN_HEIGHT / 2 - 100, 400, 200);
+
+	iSetColor(220, 20, 20);
+	iRectangle(SCREEN_WIDTH / 2 - 200, SCREEN_HEIGHT / 2 - 100, 400, 200);
+	iRectangle(SCREEN_WIDTH / 2 - 198, SCREEN_HEIGHT / 2 - 98, 396, 196);
+
+	iSetColor(255, 40, 40);
+	iText(SCREEN_WIDTH / 2 - 75, SCREEN_HEIGHT / 2 + 40, "GAME OVER", GLUT_BITMAP_TIMES_ROMAN_24);
+
+	iSetColor(255, 255, 255);
+	iText(SCREEN_WIDTH / 2 - 130, SCREEN_HEIGHT / 2 - 10, "CRASHED INTO A VEHICLE!", GLUT_BITMAP_HELVETICA_18);
+	iSetColor(255, 215, 0);
+	iText(SCREEN_WIDTH / 2 - 100, SCREEN_HEIGHT / 2 - 50, "Press 'R' to Try Again", GLUT_BITMAP_HELVETICA_18);
+}
+
+// ---------- Render Loop ----------
+void iDraw() {
+	iClear();
+
+	// Sky
+	iSetColor(135, 206, 235);
+	iFilledRectangle(0, horizonY, SCREEN_WIDTH, SCREEN_HEIGHT - horizonY);
+
+	// Sun
+	iSetColor(255, 200, 0);
+	iFilledCircle(760, 540, 35);
+
+	// Grass
+	iSetColor(102, 178, 60);
+	iFilledRectangle(0, 0, SCREEN_WIDTH, horizonY);
+
+	// Scenery
 	drawSideBuildings();
 	drawSideTreesAndPoles();
-	drawRoad();
+
+	// Road
+	double roadX[] = { 250, 650, (double)SCREEN_WIDTH, 0 };
+	double roadY[] = { (double)horizonY, (double)horizonY, 0, 0 };
+	iSetColor(70, 70, 70);
+	iFilledPolygon(roadX, roadY, 4);
+
+	// Curbs
+	double leftCurbX[] = { 250, 260, 15, 0 };
+	double leftCurbY[] = { (double)horizonY, (double)horizonY, 0, 0 };
+	iSetColor(230, 230, 230);
+	iFilledPolygon(leftCurbX, leftCurbY, 4);
+
+	double rightCurbX[] = { 650, 640, SCREEN_WIDTH - 15, (double)SCREEN_WIDTH };
+	double rightCurbY[] = { (double)horizonY, (double)horizonY, 0, 0 };
+	iSetColor(230, 230, 230);
+	iFilledPolygon(rightCurbX, rightCurbY, 4);
+
+	// Yellow Road Lanes
+	iSetColor(255, 215, 0);
+	for (float t = lineOffset; t < 1.0f; t += 0.2f) {
+		double currentY = horizonY - (t * horizonY);
+		double nextY = horizonY - ((t + 0.1f) * horizonY);
+
+		double currentWidth = 2 + (t * 16);
+		double nextWidth = 2 + ((t + 0.1f) * 16);
+
+		double lineX[] = { SCREEN_WIDTH / 2.0 - currentWidth, SCREEN_WIDTH / 2.0 + currentWidth, SCREEN_WIDTH / 2.0 + nextWidth, SCREEN_WIDTH / 2.0 - nextWidth };
+		double lineY[] = { currentY, currentY, nextY, nextY };
+
+		if (nextY >= 0) {
+			iFilledPolygon(lineX, lineY, 4);
+		}
+	}
+
+	// Active Obstacles
+	for (int i = 0; i < MAX_OBSTACLES; i++) {
+		drawObstacleVehicle(obstacles[i]);
+	}
+
+	// Player Rickshaw
+	iShowBMP2(rickshawCordinateX, rickshawCordinateY, rickshaw[rickshawIndex], 0);
+
+	// Start prompt
+	if (!isDriving && gameState == 0) {
+		iSetColor(255, 255, 255);
+		iText(SCREEN_WIDTH / 2 - 110, 80, "Press UP / W to Start Driving", GLUT_BITMAP_HELVETICA_18);
+	}
+
+	// Game Over Overlay
+	if (gameState == 1) {
+		drawGameOverScreen();
+	}
 }
 
-// ---------- Black & Yellow Auto-Rickshaw (Rear View) ----------
-void drawBlackYellowAutoRickshaw(float x, float y)
-{
-	// Ground Shadow
-	iSetColor(40, 40, 40);
-	iFilledEllipse(x, y + 2, 70, 8);
-
-	// --- Bottom Wheels / Mud Flaps ---
-	iSetColor(15, 15, 15);
-	iFilledRectangle(x - 48, y + 5, 10, 20);
-	iFilledRectangle(x - 5, y + 5, 10, 20);
-	iFilledRectangle(x + 38, y + 5, 10, 20);
-
-	// --- Yellow Bottom Bumper Beam ---
-	iSetColor(255, 204, 0);
-	iFilledRectangle(x - 52, y + 23, 104, 8);
-
-	// --- Lower Black Body Panel ---
-	iSetColor(20, 20, 20);
-	iFilledRectangle(x - 52, y + 31, 104, 32);
-
-	// --- Yellow Accent Band Across Rear Body ---
-	iSetColor(255, 204, 0);
-	iFilledRectangle(x - 52, y + 63, 104, 14);
-
-	// --- Tail Lights & Indicators ---
-	iSetColor(255, 165, 0); // Indicator (Amber)
-	iFilledRectangle(x - 46, y + 70, 6, 5);
-	iSetColor(220, 20, 20);  // Brake light (Red)
-	iFilledRectangle(x - 46, y + 65, 6, 5);
-
-	iSetColor(255, 165, 0);
-	iFilledRectangle(x + 40, y + 70, 6, 5);
-	iSetColor(220, 20, 20);
-	iFilledRectangle(x + 40, y + 65, 6, 5);
-
-	// --- Upper Cabin Canopy ---
-	iSetColor(20, 20, 20);
-	iFilledRectangle(x - 52, y + 77, 104, 60);
-
-	// Roof Top Curved Cap
-	iSetColor(20, 20, 20);
-	iFilledEllipse(x, y + 137, 52, 10);
-
-	// --- Oval Rear Window ---
-	iSetColor(40, 40, 40);
-	iFilledEllipse(x, y + 108, 25, 12);
-	iSetColor(160, 165, 170);
-	iFilledEllipse(x, y + 108, 22, 10);
-
-	// --- Side Mirrors ---
-	iSetColor(20, 20, 20);
-	iLine(x - 52, y + 112, x - 62, y + 118);
-	iFilledRectangle(x - 66, y + 112, 5, 12);
-
-	iLine(x + 52, y + 112, x + 62, y + 118);
-	iFilledRectangle(x + 61, y + 112, 5, 12);
-}
-
-// ---------- Controls & Logic ----------
-void iDraw()
-{
-	iClear();
-	drawBackground();
-	drawBlackYellowAutoRickshaw(rickshawX, rickshawY);
-}
-
-void fixedUpdate()
-{
-	// FORWARD CONTROL
-	if (isSpecialKeyPressed(GLUT_KEY_UP) || isKeyPressed('w') || isKeyPressed('W'))
-	{
-		roadOffset += roadSpeed;
+// ---------- Logic Update Loop ----------
+void updateGame() {
+	if (GetAsyncKeyState('R') & 0x8000) {
+		resetGame();
+		return;
 	}
 
-	// BACKWARD CONTROL
-	if (isSpecialKeyPressed(GLUT_KEY_DOWN) || isKeyPressed('s') || isKeyPressed('S'))
-	{
-		roadOffset -= roadSpeed;
+	if (gameState == 1) return;
+
+	// Driving Controls
+	if ((GetAsyncKeyState(VK_UP) & 0x8000) || (GetAsyncKeyState('W') & 0x8000)) {
+		isDriving = 1;
+		lineOffset += scrollSpeed;
+		if (lineOffset >= 0.2f) {
+			lineOffset -= 0.2f;
+		}
+		rickshawIndex = (rickshawIndex + 1) % 8;
 	}
 
-	// Horizontal boundary limits
-	float roadMargin = getRoadWidthAtY(rickshawY) / 2.0f - 50;
-	float minX = (WIDTH / 2.0f) - roadMargin;
-	float maxX = (WIDTH / 2.0f) + roadMargin;
-
-	// LEFT Movement
-	if (isSpecialKeyPressed(GLUT_KEY_LEFT) || isKeyPressed('a') || isKeyPressed('A'))
-	{
-		if (rickshawX > minX)
-			rickshawX -= moveSpeedX;
+	// Steering Controls
+	if ((GetAsyncKeyState(VK_LEFT) & 0x8000) || (GetAsyncKeyState('A') & 0x8000)) {
+		if (rickshawCordinateX > 40) rickshawCordinateX -= 6;
 	}
 
-	// RIGHT Movement
-	if (isSpecialKeyPressed(GLUT_KEY_RIGHT) || isKeyPressed('d') || isKeyPressed('D'))
-	{
-		if (rickshawX < maxX)
-			rickshawX += moveSpeedX;
+	if ((GetAsyncKeyState(VK_RIGHT) & 0x8000) || (GetAsyncKeyState('D') & 0x8000)) {
+		if (rickshawCordinateX < SCREEN_WIDTH - rickshawWidth - 40) rickshawCordinateX += 6;
 	}
 
-	if (isKeyPressed(27)) // ESC key
-	{
-		stopEngineSound();
-		exit(0);
+	if (isDriving) {
+		// Spawn Timer
+		obstacleSpawnTimer++;
+		if (obstacleSpawnTimer > 80) {
+			for (int i = 0; i < MAX_OBSTACLES; i++) {
+				if (!obstacles[i].active) {
+					obstacles[i].active = 1;
+					obstacles[i].y = (float)horizonY;
+
+					// Tighter horizontal spawn range near horizon (X = 400 to 500)
+					obstacles[i].x = 400.0f + (rand() % 100);
+					break;
+				}
+			}
+			obstacleSpawnTimer = 0;
+		}
+
+		// Update Obstacles & Check Collisions
+		for (int i = 0; i < MAX_OBSTACLES; i++) {
+			if (!obstacles[i].active) continue;
+
+			// 1. Move downward
+			float scale = getObstacleScale(obstacles[i].y);
+			obstacles[i].y -= obstacles[i].speed * (0.5f + scale);
+
+			// 2. Reduced perspective outward expansion factor
+			float centerDist = obstacles[i].x - (SCREEN_WIDTH / 2.0f);
+			obstacles[i].x += centerDist * 0.0055f;
+
+			// 3. Strict Dynamic Boundary Clamping (keeps vehicles on the road)
+			float roadProgress = (float)(horizonY - obstacles[i].y) / (float)horizonY;
+			if (roadProgress < 0.0f) roadProgress = 0.0f;
+
+			float scaledW = obstacleWidth * scale;
+			float minRoadX = (260.0f * (1.0f - roadProgress)) + (scaledW / 2.0f);
+			float maxRoadX = (640.0f * (1.0f - roadProgress)) + (SCREEN_WIDTH * roadProgress) - (scaledW / 2.0f);
+
+			if (obstacles[i].x < minRoadX) obstacles[i].x = minRoadX;
+			if (obstacles[i].x > maxRoadX) obstacles[i].x = maxRoadX;
+
+			// 4. Deactivate if off the bottom
+			if (obstacles[i].y < -120) {
+				resetObstacle(i);
+				continue;
+			}
+
+			// 5. ACCURATE SYNCHRONIZED BOUNDING BOX
+			// Exactly matches drawObstacleVehicle render placement
+			float obstacleLeft = obstacles[i].x - (obstacleWidth / 2.0f);
+			float obstacleBottom = obstacles[i].y;
+
+			// 6. Collision Check (triggers on any visual overlap)
+			if (checkCollision((float)rickshawCordinateX, (float)rickshawCordinateY,
+				(float)rickshawWidth, (float)rickshawHeight,
+				obstacleLeft, obstacleBottom,
+				(float)obstacleWidth, (float)obstacleHeight)) {
+				gameState = 1;
+			}
+		}
 	}
 }
 
@@ -329,13 +500,19 @@ void iMouseMove(int mx, int my) {}
 void iPassiveMouseMove(int mx, int my) {}
 void iMouse(int button, int state, int mx, int my) {}
 
-int main()
-{
-	iInitialize(WIDTH, HEIGHT, "Auto-Rickshaw Driving Game");
+void iKeyboard(unsigned char key) {
+	if (key == 'r' || key == 'R') {
+		resetGame();
+	}
+}
 
-	// Start background audio (Make sure engine.wav or engine.mp3 is in project folder)
-	startEngineSound();
+void iSpecialKeyboard(unsigned char key) {}
+void fixedUpdate() {}
 
+int main() {
+	iInitialize(SCREEN_WIDTH, SCREEN_HEIGHT, "Perspective Road View");
+	initObstacles();
+	iSetTimer(15, updateGame);
 	iStart();
 	return 0;
 }
