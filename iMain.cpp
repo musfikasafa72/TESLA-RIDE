@@ -5,7 +5,7 @@
 
 #define SCREEN_WIDTH 900
 #define SCREEN_HEIGHT 600
-
+//change
 int horizonY = 380;
 float lineOffset = 0.0f;
 float scrollSpeed = 0.015f;
