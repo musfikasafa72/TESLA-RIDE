@@ -1,6 +1,7 @@
 #include "iGraphics.h"   //// nadira told me to make a change
 #include <windows.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <math.h>
 
 #define SCREEN_WIDTH 900
@@ -15,16 +16,16 @@ int gameState = 0;
 
 // Driving flag: track if player started moving
 int isDriving = 0;
-
+//practise change by nadira hihi
 // Rickshaw Animation & Position
 char rickshaw[8][15] = { "R1.bmp", "R2.bmp", "R3.bmp", "R4.bmp", "R5.bmp", "R6.bmp", "R7.bmp", "R8.bmp" };
 int rickshawCordinateX = 425;
 int rickshawCordinateY = 10;
 int rickshawIndex = 0;
 
-// Base Rickshaw size
-int rickshawWidth = 45;
-int rickshawHeight = 50;
+// Base Rickshaw size (adjusted to match full sprite dimensions)
+int rickshawWidth = 60;
+int rickshawHeight = 70;
 
 // Obstacle Dimensions
 int obstacleWidth = 65;
@@ -44,9 +45,26 @@ typedef struct {
 Obstacle obstacles[MAX_OBSTACLES];
 int obstacleSpawnTimer = 0;
 
+// ---------- Coin System ----------
+#define MAX_COINS 5
+int totalCoins = 0;
+int coinRadius = 12;
+
+typedef struct {
+	float x;
+	float y;
+	float speed;
+	int active;
+} Coin;
+
+Coin coins[MAX_COINS];
+int coinSpawnTimer = 0;
+
 // ---------- Declarations ----------
 void resetObstacle(int index);
 void initObstacles();
+void resetCoin(int index);
+void initCoins();
 void resetGame();
 
 void resetObstacle(int index) {
@@ -64,25 +82,61 @@ void initObstacles() {
 	obstacleSpawnTimer = 0;
 }
 
+void resetCoin(int index) {
+	coins[index].y = (float)horizonY;
+	coins[index].x = 320 + (rand() % 260);
+	coins[index].speed = 3.5f + (rand() % 50) / 50.0f;
+	coins[index].active = 0;
+}
+
+void initCoins() {
+	for (int i = 0; i < MAX_COINS; i++) {
+		resetCoin(i);
+	}
+	coinSpawnTimer = 0;
+}
+
 void resetGame() {
 	rickshawCordinateX = 425;
 	rickshawCordinateY = 10;
 	lineOffset = 0.0f;
 	isDriving = 0;
 	initObstacles();
+	initCoins();
+	totalCoins = 0;
 	gameState = 0;
 }
 
-// Strict Omnidirectional Axis-Aligned Bounding Box (AABB) Collision Detection
-// Returns 1 if touching from top, bottom, left, or right side
+// Accurate Omnidirectional Collision Detection with tolerance margin
 int checkCollision(float rX, float rY, float rW, float rH, float oX, float oY, float oW, float oH) {
-	if (rX < (oX + oW) &&
-		(rX + rW) > oX &&
-		rY < (oY + oH) &&
-		(rY + rH) > oY) {
+	float margin = 5.0f; // Small buffer to ensure visual contact always triggers
+	if ((rX - margin) < (oX + oW) &&
+		(rX + rW + margin) > oX &&
+		(rY - margin) < (oY + oH) &&
+		(rY + rH + margin) > oY) {
 		return 1;
 	}
 	return 0;
+}
+
+// Accurate Circle-to-Box (AABB) Collision Detection for Coins
+int checkCoinCollision(float rX, float rY, float rW, float rH, float cX, float cY, float radius) {
+	// Find closest point on Rickshaw rectangle to center of the coin
+	float closestX = cX;
+	if (cX < rX) closestX = rX;
+	else if (cX > rX + rW) closestX = rX + rW;
+
+	float closestY = cY;
+	if (cY < rY) closestY = rY;
+	else if (cY > rY + rH) closestY = rY + rH;
+
+	// Calculate squared distance between coin center and closest point on rickshaw
+	float distX = cX - closestX;
+	float distY = cY - closestY;
+
+	float effectiveRadius = radius + 6.0f;
+
+	return (distX * distX + distY * distY) <= (effectiveRadius * effectiveRadius);
 }
 
 // ---------- Visual Elements ----------
@@ -291,6 +345,23 @@ void drawObstacleVehicle(Obstacle obs) {
 	}
 }
 
+// Draw Golden Coin
+void drawCoin(Coin c) {
+	if (!c.active) return;
+
+	// Outer golden rim
+	iSetColor(218, 165, 32);
+	iFilledCircle(c.x, c.y, coinRadius);
+
+	// Inner gold
+	iSetColor(255, 215, 0);
+	iFilledCircle(c.x, c.y, coinRadius - 2);
+
+	// Highlight shine
+	iSetColor(255, 255, 200);
+	iFilledCircle(c.x - 3, c.y + 3, 3);
+}
+
 // Game Over Overlay Interface
 void drawGameOverScreen() {
 	iSetColor(0, 0, 0);
@@ -368,8 +439,19 @@ void iDraw() {
 		drawObstacleVehicle(obstacles[i]);
 	}
 
-	// 8. Player Rickshaw
+	// 8. Active Coins
+	for (int i = 0; i < MAX_COINS; i++) {
+		drawCoin(coins[i]);
+	}
+
+	// 9. Player Rickshaw
 	iShowBMP2(rickshawCordinateX, rickshawCordinateY, rickshaw[rickshawIndex], 0);
+
+	// HUD - Score / Coins Display
+	char coinText[32];
+	sprintf(coinText, "Coins: %d", totalCoins);
+	iSetColor(255, 215, 0);
+	iText(30, SCREEN_HEIGHT - 35, coinText, GLUT_BITMAP_HELVETICA_18);
 
 	// Start prompt
 	if (!isDriving && gameState == 0) {
@@ -377,7 +459,7 @@ void iDraw() {
 		iText(SCREEN_WIDTH / 2 - 110, 80, "Press UP / W to Start Driving", GLUT_BITMAP_HELVETICA_18);
 	}
 
-	// 9. Game Over Overlay
+	// 10. Game Over Overlay
 	if (gameState == 1) {
 		drawGameOverScreen();
 	}
@@ -414,6 +496,7 @@ void updateGame() {
 
 	// Vehicle Spawning & Movement
 	if (isDriving) {
+		// --- Obstacle Spawning ---
 		obstacleSpawnTimer++;
 		if (obstacleSpawnTimer > 40) {
 			for (int i = 0; i < MAX_OBSTACLES; i++) {
@@ -427,6 +510,7 @@ void updateGame() {
 			obstacleSpawnTimer = 0;
 		}
 
+		// --- Obstacle Movement & Collision ---
 		for (int i = 0; i < MAX_OBSTACLES; i++) {
 			if (!obstacles[i].active) continue;
 
@@ -437,11 +521,7 @@ void updateGame() {
 			float centerDist = obstacles[i].x - (SCREEN_WIDTH / 2.0f);
 			obstacles[i].x += centerDist * 0.005f;
 
-			if (obstacles[i].y < -70) {
-				resetObstacle(i);
-			}
-
-			// --- STRICT OMNIDIRECTIONAL COLLISION CHECK ---
+			// --- ACCURATE COLLISION CHECK ---
 			float vehicleLeft = obstacles[i].x - (obstacleWidth / 2.0f);
 			float vehicleBottom = obstacles[i].y;
 
@@ -449,7 +529,50 @@ void updateGame() {
 				(float)rickshawWidth, (float)rickshawHeight,
 				vehicleLeft, vehicleBottom,
 				(float)obstacleWidth, (float)obstacleHeight)) {
-				gameState = 1; // Trigger Game Over on touch from any side
+				gameState = 1; // Trigger Game Over on touch/overlap from any side
+			}
+
+			// Off-screen reset
+			if (obstacles[i].y < -80) {
+				resetObstacle(i);
+			}
+		}
+
+		// --- Coin Spawning ---
+		coinSpawnTimer++;
+		if (coinSpawnTimer > 30) {
+			for (int i = 0; i < MAX_COINS; i++) {
+				if (!coins[i].active) {
+					coins[i].active = 1;
+					coins[i].y = (float)horizonY;
+					coins[i].x = 300 + (rand() % 300);
+					break;
+				}
+			}
+			coinSpawnTimer = 0;
+		}
+
+		// --- Coin Movement & Accurate Collision ---
+		for (int i = 0; i < MAX_COINS; i++) {
+			if (!coins[i].active) continue;
+
+			// Move coin downward
+			coins[i].y -= coins[i].speed;
+
+			// Perspective spread outward matching road
+			float centerDist = coins[i].x - (SCREEN_WIDTH / 2.0f);
+			coins[i].x += centerDist * 0.005f;
+
+			// --- ACCURATE COIN PICKUP COLLISION CHECK ---
+			if (checkCoinCollision((float)rickshawCordinateX, (float)rickshawCordinateY,
+				(float)rickshawWidth, (float)rickshawHeight,
+				coins[i].x, coins[i].y, (float)coinRadius)) {
+				totalCoins++;
+				coins[i].active = 0; // Deactivate once collected
+			}
+
+			if (coins[i].y < -20) {
+				resetCoin(i);
 			}
 		}
 	}
@@ -466,6 +589,7 @@ int main() {
 	iInitialize(SCREEN_WIDTH, SCREEN_HEIGHT, "Perspective Road View");
 
 	initObstacles();
+	initCoins();
 
 	iSetTimer(60, updateGame);
 
