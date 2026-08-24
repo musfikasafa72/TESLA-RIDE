@@ -1,41 +1,48 @@
  #include "iGraphics.h"
-#include <windows.h> // Direct Windows keyboard handling
 
 #define SCREEN_WIDTH 800
 #define SCREEN_HEIGHT 600
 
+// Horizon level (where the road disappears)
 int horizonY = 380;
+
+// Animation offset for scrolling road lines
 float lineOffset = 0.0f;
-float scrollSpeed = 0.015f;
+float scrollSpeed = 0.015f; // Slower, smoother scrolling speed
 
-char rickshaw[8][15] = { "char\\R1.bmp", "char\\R2.bmp", "char\\R3.bmp", "char\\R4.bmp", "char\\R5.bmp", "char\\R6.bmp", "char\\R7.bmp", "char\\R8.bmp" };
+char rickshaw[8][15] = { "char\\R1.bmp", "char\\R2.bmp", "char\\R3.bmp", "char\\R4.bmp", "char\\R5.bmp", "char\\R6.bmp", "char\\R7.bmp", "char\\R8.bmp", };
+char rickshawStand[15] = "char\\R9.bmp";
 
-int rickshawCordinateX = 300;
-int rickshawCordinateY = 10;
+int rickshawCordinateX = 0;
+int rickshawCordinateY = 0;
 int rickshawIndex = 0;
+
+bool standPosition = true;
+int standCounter = 0;
 
 void iDraw() {
 	iClear();
 
-	// 1. Sky & Background
-	iSetColor(135, 206, 235);
+	// 1. Sky & Background (Top Portion)
+	iSetColor(135, 206, 235); // Sky Blue
 	iFilledRectangle(0, horizonY, SCREEN_WIDTH, SCREEN_HEIGHT - horizonY);
 
 	// Sun
 	iSetColor(255, 200, 0);
 	iFilledCircle(400, 480, 40);
 
-	// 2. Grass Sides
-	iSetColor(34, 139, 34);
+	// 2. Grass Sides (Bottom Portion)
+	iSetColor(34, 139, 34); // Green Grass
 	iFilledRectangle(0, 0, SCREEN_WIDTH, horizonY);
 
-	// 3. Perspective Road
+	// 3. Perspective Asphalt Road (Trapezoid shape)
 	double roadX[] = { 350, 450, 750, 50 };
 	double roadY[] = { (double)horizonY, (double)horizonY, 0, 0 };
-	iSetColor(60, 60, 60);
+
+	iSetColor(60, 60, 60); // Dark Gray Road
 	iFilledPolygon(roadX, roadY, 4);
 
-	// 4. Curbs
+	// 4. Red & White Striped Road Borders (Curbs)
 	double leftCurbX[] = { 340, 350, 50, 10 };
 	double leftCurbY[] = { (double)horizonY, (double)horizonY, 0, 0 };
 	iSetColor(200, 0, 0);
@@ -46,7 +53,7 @@ void iDraw() {
 	iSetColor(200, 0, 0);
 	iFilledPolygon(rightCurbX, rightCurbY, 4);
 
-	// 5. Center Yellow Lane Markers
+	// 5. Perspective Center Yellow Lane Markers
 	iSetColor(255, 215, 0);
 	for (float t = lineOffset; t < 1.0f; t += 0.2f) {
 		double currentY = horizonY - (t * horizonY);
@@ -62,47 +69,122 @@ void iDraw() {
 			iFilledPolygon(lineX, lineY, 4);
 		}
 	}
-
-	// Draw Rickshaw
-	iShowBMP2(rickshawCordinateX, rickshawCordinateY, rickshaw[rickshawIndex], 0);
+	if (!standPosition){
+		iShowBMP2(rickshawCordinateX, rickshawCordinateY, rickshaw[rickshawIndex], 0);
+		standCounter++;
+		if (standCounter >= 20)
+		{
+			standCounter = 0;
+			rickshawIndex = 0;
+			standPosition = true;
+		}
+	}
+	else{
+		iShowBMP2(rickshawCordinateX, rickshawCordinateY, rickshawStand, 0);
+	}
 }
 
-// Check hardware keys directly every frame
-void updateGame() {
-	// Check if UP Arrow OR 'W' is physically held down
-	if ((GetAsyncKeyState(VK_UP) & 0x8000) || (GetAsyncKeyState('W') & 0x8000)) {
-		// Scroll road
-		lineOffset += scrollSpeed;
-		if (lineOffset >= 0.2f) {
-			lineOffset -= 0.2f;
-		}
-		// Animate rickshaw frames
-		rickshawIndex = (rickshawIndex + 1) % 8;
-	}
-
-	// Check if LEFT Arrow OR 'A' is physically held down
-	if ((GetAsyncKeyState(VK_LEFT) & 0x8000) || (GetAsyncKeyState('A') & 0x8000)) {
-		if (rickshawCordinateX > 50) rickshawCordinateX -= 10;
-	}
-
-	// Check if RIGHT Arrow OR 'D' is physically held down
-	if ((GetAsyncKeyState(VK_RIGHT) & 0x8000) || (GetAsyncKeyState('D') & 0x8000)) {
-		if (rickshawCordinateX < 550) rickshawCordinateX += 10;
+/*
+* Animates perspective lines moving downward to simulate road movement
+*/
+void updateEnvironment() {
+	lineOffset += scrollSpeed;
+	if (lineOffset >= 0.2f) {
+		lineOffset -= 0.2f;
 	}
 }
 
 void iMouseMove(int mx, int my) {}
-void iPassiveMouseMove(int mx, int my) {}
+void iPassiveMouseMove(int mx, int my)
+{
+	int mposx = mx;
+	int mposy = my;
+	if (mx == 2){}
+	else if (my == 2){}
+
+
+}
 void iMouse(int button, int state, int mx, int my) {}
-void iKeyboard(unsigned char key) {}
-void iSpecialKeyboard(unsigned char key) {}
+void iKeyboard(unsigned char key)
+{ 
+	if (key == 'w')
+	{
+
+	}
+	else if (key == 's')
+	{
+
+	}
+	else if (key == 'a')
+	{
+
+	}
+	else if (key == 'd')
+	{
+
+	}
+
+
+}
+
+
+void iSpecialKeyboard(unsigned char key) {
+	if (key == GLUT_KEY_UP)
+	{
+
+	}
+	if (key == GLUT_KEY_DOWN)
+	{
+
+	}
+	if (key == GLUT_KEY_LEFT)
+	{
+		rickshawCordinateX -= 10;
+		rickshawIndex--;
+		if (rickshawIndex < 0)
+			rickshawIndex = 7;
+
+	}
+	if (key == GLUT_KEY_RIGHT)
+	{
+		rickshawCordinateX += 10;
+		rickshawIndex++;
+		if (rickshawIndex >= 8)
+			rickshawIndex = 0;
+
+		standPosition = false;
+	}
+	if (key == GLUT_KEY_HOME)
+	{
+
+	}
+	if (key == GLUT_KEY_INSERT)
+	{
+
+	}
+
+}
+
+
 void fixedUpdate() {}
+
+void change(){
+
+
+}
 
 int main() {
 	iInitialize(SCREEN_WIDTH, SCREEN_HEIGHT, "Perspective Road View");
 
-	// Game Loop Timer (Updates input, road movement, and rickshaw every 30ms)
-	iSetTimer(60, updateGame);
+	// Initial position to center the rickshaw on the road near the bottom
+	rickshawCordinateX = 260; // Adjust based on your image size
+	rickshawCordinateY = 10;
+
+	// Timer 1: Animates the scrolling road
+	iSetTimer(60, updateEnvironment);
+
+	// Timer 2: Animates the rickshaw sprite (switches image every 100ms)
+	iSetTimer(400, change);
 
 	iStart();
 	return 0;
