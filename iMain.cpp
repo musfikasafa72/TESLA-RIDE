@@ -1,7 +1,6 @@
-#include "iGraphics.h"   //// nadira told me to make a change
+ #include "iGraphics.h"
 #include <windows.h>
 #include <stdlib.h>
-#include <stdio.h>
 #include <math.h>
 
 #define SCREEN_WIDTH 900
@@ -16,20 +15,20 @@ int gameState = 0;
 
 // Driving flag: track if player started moving
 int isDriving = 0;
-//practise change by nadira hihi
+
 // Rickshaw Animation & Position
-char rickshaw[8][15] = { "R1.bmp", "R2.bmp", "R3.bmp", "R4.bmp", "R5.bmp", "R6.bmp", "R7.bmp", "R8.bmp" };
+char rickshaw[8][15] = { "char\\R1.bmp", "char\\R2.bmp", "char\\R3.bmp", "char\\R4.bmp", "char\\R5.bmp", "char\\R6.bmp", "char\\R7.bmp", "char\\R8.bmp" };
 int rickshawCordinateX = 425;
 int rickshawCordinateY = 10;
 int rickshawIndex = 0;
 
-// Base Rickshaw size (adjusted to match full sprite dimensions)
-int rickshawWidth = 60;
-int rickshawHeight = 70;
+// Base Rickshaw size
+int rickshawWidth = 45;
+int rickshawHeight = 50;
 
-// Obstacle Dimensions
-int obstacleWidth = 65;
-int obstacleHeight = 70;
+// ---------- Larger Obstacle Dimensions ----------
+int obstacleWidth = 65;   // Increased width
+int obstacleHeight = 70;  // Increased height
 
 // ---------- Obstacle System ----------
 #define MAX_OBSTACLES 3
@@ -45,26 +44,9 @@ typedef struct {
 Obstacle obstacles[MAX_OBSTACLES];
 int obstacleSpawnTimer = 0;
 
-// ---------- Coin System ----------
-#define MAX_COINS 5
-int totalCoins = 0;
-int coinRadius = 12;
-
-typedef struct {
-	float x;
-	float y;
-	float speed;
-	int active;
-} Coin;
-
-Coin coins[MAX_COINS];
-int coinSpawnTimer = 0;
-
 // ---------- Declarations ----------
 void resetObstacle(int index);
 void initObstacles();
-void resetCoin(int index);
-void initCoins();
 void resetGame();
 
 void resetObstacle(int index) {
@@ -82,61 +64,24 @@ void initObstacles() {
 	obstacleSpawnTimer = 0;
 }
 
-void resetCoin(int index) {
-	coins[index].y = (float)horizonY;
-	coins[index].x = 320 + (rand() % 260);
-	coins[index].speed = 3.5f + (rand() % 50) / 50.0f;
-	coins[index].active = 0;
-}
-
-void initCoins() {
-	for (int i = 0; i < MAX_COINS; i++) {
-		resetCoin(i);
-	}
-	coinSpawnTimer = 0;
-}
-
 void resetGame() {
 	rickshawCordinateX = 425;
 	rickshawCordinateY = 10;
 	lineOffset = 0.0f;
 	isDriving = 0;
 	initObstacles();
-	initCoins();
-	totalCoins = 0;
 	gameState = 0;
 }
 
-// Accurate Omnidirectional Collision Detection with tolerance margin
+// Axis-Aligned Bounding Box Collision
 int checkCollision(float rX, float rY, float rW, float rH, float oX, float oY, float oW, float oH) {
-	float margin = 5.0f; // Small buffer to ensure visual contact always triggers
-	if ((rX - margin) < (oX + oW) &&
-		(rX + rW + margin) > oX &&
-		(rY - margin) < (oY + oH) &&
-		(rY + rH + margin) > oY) {
+	if (rX < oX + oW &&
+		rX + rW > oX &&
+		rY < oY + oH &&
+		rY + rH > oY) {
 		return 1;
 	}
 	return 0;
-}
-
-// Accurate Circle-to-Box (AABB) Collision Detection for Coins
-int checkCoinCollision(float rX, float rY, float rW, float rH, float cX, float cY, float radius) {
-	// Find closest point on Rickshaw rectangle to center of the coin
-	float closestX = cX;
-	if (cX < rX) closestX = rX;
-	else if (cX > rX + rW) closestX = rX + rW;
-
-	float closestY = cY;
-	if (cY < rY) closestY = rY;
-	else if (cY > rY + rH) closestY = rY + rH;
-
-	// Calculate squared distance between coin center and closest point on rickshaw
-	float distX = cX - closestX;
-	float distY = cY - closestY;
-
-	float effectiveRadius = radius + 6.0f;
-
-	return (distX * distX + distY * distY) <= (effectiveRadius * effectiveRadius);
 }
 
 // ---------- Visual Elements ----------
@@ -234,101 +179,124 @@ void drawSideTreesAndPoles() {
 	}
 }
 
-// Rear-View Yellow Taxi (65 x 70)
+// Enlarged Rear-View Yellow Taxi (Size: 65 x 70)
 void drawTaxi(int vx, int vy) {
 	int w = obstacleWidth;
+	int h = obstacleHeight;
 
+	// Rear Tires
 	iSetColor(30, 30, 30);
 	iFilledRectangle(vx + 6, vy, 12, 9);
 	iFilledRectangle(vx + w - 18, vy, 12, 9);
 
+	// Rear Bumper
 	iSetColor(50, 50, 50);
 	iFilledRectangle(vx + 4, vy + 6, w - 8, 8);
 
+	// Main Taxi Body (Bright Yellow)
 	iSetColor(250, 200, 0);
 	iFilledRectangle(vx + 4, vy + 14, w - 8, 25);
 
+	// Curved Upper Body (Slanted Roof Section)
 	double roofX[] = { (double)vx + 4, (double)vx + 12, (double)vx + w - 12, (double)vx + w - 4 };
 	double roofY[] = { (double)vy + 39, (double)vy + 62, (double)vy + 62, (double)vy + 39 };
 	iFilledPolygon(roofX, roofY, 4);
 
+	// Rear Windshield (Slanted dark glass)
 	iSetColor(40, 50, 65);
 	double glassX[] = { (double)vx + 8, (double)vx + 15, (double)vx + w - 15, (double)vx + w - 8 };
 	double glassY[] = { (double)vy + 41, (double)vy + 59, (double)vy + 59, (double)vy + 41 };
 	iFilledPolygon(glassX, glassY, 4);
 
+	// Checkered Stripe Across Back
 	for (int i = 0; i < 9; i++) {
 		if (i % 2 == 0) iSetColor(20, 20, 20);
 		else iSetColor(255, 255, 255);
 		iFilledRectangle(vx + 7 + (i * 6), vy + 33, 6, 6);
 	}
 
+	// License Plate Box
 	iSetColor(245, 245, 245);
 	iFilledRectangle(vx + 22, vy + 17, 20, 8);
 
+	// Red Horizontal Tail Lights
 	iSetColor(220, 30, 30);
 	iFilledRectangle(vx + 6, vy + 22, 14, 7);
 	iFilledRectangle(vx + w - 20, vy + 22, 14, 7);
 
+	// Side Mirrors
 	iSetColor(230, 180, 0);
 	iFilledRectangle(vx - 3, vy + 40, 5, 8);
 	iFilledRectangle(vx + w - 2, vy + 40, 5, 8);
 
+	// Top TAXI Sign
 	iSetColor(240, 240, 240);
 	iFilledRectangle(vx + 23, vy + 62, 18, 7);
 	iSetColor(20, 20, 20);
 	iRectangle(vx + 23, vy + 62, 18, 7);
 }
 
-// Rear-View White Van (65 x 70)
+// Enlarged Rear-View White Van (Size: 65 x 70)
 void drawVan(int vx, int vy) {
 	int w = obstacleWidth;
+	int h = obstacleHeight;
 
+	// Rear Tires
 	iSetColor(30, 30, 30);
 	iFilledRectangle(vx + 7, vy, 10, 8);
 	iFilledRectangle(vx + w - 17, vy, 10, 8);
 
+	// Dark Rear Bumper
 	iSetColor(100, 105, 110);
 	iFilledRectangle(vx + 4, vy + 6, w - 8, 10);
 	iSetColor(40, 40, 40);
 	iFilledRectangle(vx + 12, vy + 9, 10, 3);
 	iFilledRectangle(vx + w - 22, vy + 9, 10, 3);
 
+	// Top Roof Cargo Carrier (Roof Box)
 	iSetColor(230, 230, 230);
 	iFilledRectangle(vx + 10, vy + 60, w - 20, 9);
 	iSetColor(180, 180, 180);
 	iRectangle(vx + 10, vy + 60, w - 20, 9);
+	// Roof Rack Bars
 	iSetColor(60, 60, 60);
 	iFilledRectangle(vx + 7, vy + 57, 3, 6);
 	iFilledRectangle(vx + w - 10, vy + 57, 3, 6);
 
+	// Main White Van Body Frame
 	iSetColor(245, 245, 250);
 	iFilledRectangle(vx + 5, vy + 15, w - 10, 43);
 
+	// Body Contour / Outer Outline
 	iSetColor(200, 205, 210);
 	iRectangle(vx + 5, vy + 15, w - 10, 43);
 
+	// Rear Dual Split Door Glasses (Left & Right Windows)
 	iSetColor(70, 80, 90);
 	iFilledRectangle(vx + 9, vy + 37, 21, 16);
 	iFilledRectangle(vx + w - 30, vy + 37, 21, 16);
 
+	// Window Inner Glass Detail
 	iSetColor(110, 125, 140);
 	iFilledRectangle(vx + 11, vy + 39, 17, 12);
 	iFilledRectangle(vx + w - 28, vy + 39, 17, 12);
 
+	// Center Door Split Line & Handle
 	iSetColor(140, 145, 150);
 	iFilledRectangle(vx + (w / 2), vy + 15, 2, 38);
 	iSetColor(50, 50, 50);
 	iFilledRectangle(vx + (w / 2) + 3, vy + 26, 3, 7);
 
-	iSetColor(240, 140, 0);
+	// Vertical Side Indicator Lights
+	iSetColor(240, 140, 0); // Orange Indicator
 	iFilledRectangle(vx + 1, vy + 22, 4, 14);
 	iFilledRectangle(vx + w - 5, vy + 22, 4, 14);
 
-	iSetColor(220, 40, 40);
+	iSetColor(220, 40, 40); // Red Brake Portion
 	iFilledRectangle(vx + 1, vy + 16, 4, 6);
 	iFilledRectangle(vx + w - 5, vy + 16, 4, 6);
 
+	// Side Mirrors
 	iSetColor(70, 70, 70);
 	iFilledRectangle(vx - 3, vy + 37, 4, 7);
 	iFilledRectangle(vx + w - 1, vy + 37, 4, 7);
@@ -345,46 +313,25 @@ void drawObstacleVehicle(Obstacle obs) {
 	}
 }
 
-// Draw Golden Coin
-void drawCoin(Coin c) {
-	if (!c.active) return;
-
-	// Outer golden rim
-	iSetColor(218, 165, 32);
-	iFilledCircle(c.x, c.y, coinRadius);
-
-	// Inner gold
-	iSetColor(255, 215, 0);
-	iFilledCircle(c.x, c.y, coinRadius - 2);
-
-	// Highlight shine
-	iSetColor(255, 255, 200);
-	iFilledCircle(c.x - 3, c.y + 3, 3);
-}
-
-// Game Over Overlay Interface
 void drawGameOverScreen() {
 	iSetColor(0, 0, 0);
-	iFilledRectangle(SCREEN_WIDTH / 2 - 200, SCREEN_HEIGHT / 2 - 100, 400, 200);
+	iFilledRectangle(SCREEN_WIDTH / 2 - 180, SCREEN_HEIGHT / 2 - 90, 360, 180);
 
 	iSetColor(220, 20, 20);
-	iRectangle(SCREEN_WIDTH / 2 - 200, SCREEN_HEIGHT / 2 - 100, 400, 200);
-	iRectangle(SCREEN_WIDTH / 2 - 198, SCREEN_HEIGHT / 2 - 98, 396, 196);
+	iRectangle(SCREEN_WIDTH / 2 - 180, SCREEN_HEIGHT / 2 - 90, 360, 180);
 
-	iSetColor(255, 40, 40);
-	iText(SCREEN_WIDTH / 2 - 75, SCREEN_HEIGHT / 2 + 40, "GAME OVER", GLUT_BITMAP_TIMES_ROMAN_24);
+	iSetColor(255, 50, 50);
+	iText(SCREEN_WIDTH / 2 - 70, SCREEN_HEIGHT / 2 + 30, "GAME OVER", GLUT_BITMAP_TIMES_ROMAN_24);
 
 	iSetColor(255, 255, 255);
-	iText(SCREEN_WIDTH / 2 - 130, SCREEN_HEIGHT / 2 - 10, "CRASHED INTO A VEHICLE!", GLUT_BITMAP_HELVETICA_18);
-	iSetColor(255, 215, 0);
-	iText(SCREEN_WIDTH / 2 - 100, SCREEN_HEIGHT / 2 - 50, "Press 'R' to Try Again", GLUT_BITMAP_HELVETICA_18);
+	iText(SCREEN_WIDTH / 2 - 100, SCREEN_HEIGHT / 2 - 10, "Press 'R' to Restart", GLUT_BITMAP_HELVETICA_18);
 }
 
-// ---------- Render Loop ----------
+// ---------- Main Render Loop ----------
 void iDraw() {
 	iClear();
 
-	// 1. Sky
+	// 1. Sky & Background
 	iSetColor(135, 206, 235);
 	iFilledRectangle(0, horizonY, SCREEN_WIDTH, SCREEN_HEIGHT - horizonY);
 
@@ -392,15 +339,15 @@ void iDraw() {
 	iSetColor(255, 200, 0);
 	iFilledCircle(760, 540, 35);
 
-	// 2. Grass
+	// 2. Grass Sides
 	iSetColor(102, 178, 60);
 	iFilledRectangle(0, 0, SCREEN_WIDTH, horizonY);
 
-	// 3. Scenery
+	// 3. Side Buildings & Trees
 	drawSideBuildings();
 	drawSideTreesAndPoles();
 
-	// 4. Road
+	// 4. Perspective Road
 	double roadX[] = { 250, 650, (double)SCREEN_WIDTH, 0 };
 	double roadY[] = { (double)horizonY, (double)horizonY, 0, 0 };
 	iSetColor(70, 70, 70);
@@ -417,7 +364,7 @@ void iDraw() {
 	iSetColor(230, 230, 230);
 	iFilledPolygon(rightCurbX, rightCurbY, 4);
 
-	// 6. Yellow Lanes
+	// 6. Center Yellow Lane Markers
 	iSetColor(255, 215, 0);
 	for (float t = lineOffset; t < 1.0f; t += 0.2f) {
 		double currentY = horizonY - (t * horizonY);
@@ -434,49 +381,36 @@ void iDraw() {
 		}
 	}
 
-	// 7. Active Obstacles
+	// 7. Draw Obstacles
 	for (int i = 0; i < MAX_OBSTACLES; i++) {
 		drawObstacleVehicle(obstacles[i]);
 	}
 
-	// 8. Active Coins
-	for (int i = 0; i < MAX_COINS; i++) {
-		drawCoin(coins[i]);
-	}
-
-	// 9. Player Rickshaw
+	// 8. Draw Rickshaw
 	iShowBMP2(rickshawCordinateX, rickshawCordinateY, rickshaw[rickshawIndex], 0);
 
-	// HUD - Score / Coins Display
-	char coinText[32];
-	sprintf(coinText, "Coins: %d", totalCoins);
-	iSetColor(255, 215, 0);
-	iText(30, SCREEN_HEIGHT - 35, coinText, GLUT_BITMAP_HELVETICA_18);
-
-	// Start prompt
+	// Prompt user to start driving
 	if (!isDriving && gameState == 0) {
 		iSetColor(255, 255, 255);
 		iText(SCREEN_WIDTH / 2 - 110, 80, "Press UP / W to Start Driving", GLUT_BITMAP_HELVETICA_18);
 	}
 
-	// 10. Game Over Overlay
+	// 9. Overlay Game Over Screen
 	if (gameState == 1) {
 		drawGameOverScreen();
 	}
 }
 
-// ---------- Logic Update Loop ----------
+// ---------- Game Logic Update Loop ----------
 void updateGame() {
-	// Restart key triggers anytime
 	if (GetAsyncKeyState('R') & 0x8000) {
 		resetGame();
 		return;
 	}
 
-	// Freeze logic when Game Over occurs
 	if (gameState == 1) return;
 
-	// Movement Controls
+	// Check driving inputs
 	if ((GetAsyncKeyState(VK_UP) & 0x8000) || (GetAsyncKeyState('W') & 0x8000)) {
 		isDriving = 1;
 		lineOffset += scrollSpeed;
@@ -494,9 +428,8 @@ void updateGame() {
 		if (rickshawCordinateX < 800) rickshawCordinateX += 10;
 	}
 
-	// Vehicle Spawning & Movement
+	// Obstacles spawn and move only after driving begins
 	if (isDriving) {
-		// --- Obstacle Spawning ---
 		obstacleSpawnTimer++;
 		if (obstacleSpawnTimer > 40) {
 			for (int i = 0; i < MAX_OBSTACLES; i++) {
@@ -510,69 +443,22 @@ void updateGame() {
 			obstacleSpawnTimer = 0;
 		}
 
-		// --- Obstacle Movement & Collision ---
 		for (int i = 0; i < MAX_OBSTACLES; i++) {
 			if (!obstacles[i].active) continue;
 
-			// Move vehicle forward
 			obstacles[i].y -= obstacles[i].speed;
 
-			// Perspective spread
 			float centerDist = obstacles[i].x - (SCREEN_WIDTH / 2.0f);
 			obstacles[i].x += centerDist * 0.005f;
 
-			// --- ACCURATE COLLISION CHECK ---
-			float vehicleLeft = obstacles[i].x - (obstacleWidth / 2.0f);
-			float vehicleBottom = obstacles[i].y;
-
-			if (checkCollision((float)rickshawCordinateX, (float)rickshawCordinateY,
-				(float)rickshawWidth, (float)rickshawHeight,
-				vehicleLeft, vehicleBottom,
-				(float)obstacleWidth, (float)obstacleHeight)) {
-				gameState = 1; // Trigger Game Over on touch/overlap from any side
-			}
-
-			// Off-screen reset
-			if (obstacles[i].y < -80) {
+			if (obstacles[i].y < -70) {
 				resetObstacle(i);
 			}
-		}
 
-		// --- Coin Spawning ---
-		coinSpawnTimer++;
-		if (coinSpawnTimer > 30) {
-			for (int i = 0; i < MAX_COINS; i++) {
-				if (!coins[i].active) {
-					coins[i].active = 1;
-					coins[i].y = (float)horizonY;
-					coins[i].x = 300 + (rand() % 300);
-					break;
-				}
-			}
-			coinSpawnTimer = 0;
-		}
-
-		// --- Coin Movement & Accurate Collision ---
-		for (int i = 0; i < MAX_COINS; i++) {
-			if (!coins[i].active) continue;
-
-			// Move coin downward
-			coins[i].y -= coins[i].speed;
-
-			// Perspective spread outward matching road
-			float centerDist = coins[i].x - (SCREEN_WIDTH / 2.0f);
-			coins[i].x += centerDist * 0.005f;
-
-			// --- ACCURATE COIN PICKUP COLLISION CHECK ---
-			if (checkCoinCollision((float)rickshawCordinateX, (float)rickshawCordinateY,
-				(float)rickshawWidth, (float)rickshawHeight,
-				coins[i].x, coins[i].y, (float)coinRadius)) {
-				totalCoins++;
-				coins[i].active = 0; // Deactivate once collected
-			}
-
-			if (coins[i].y < -20) {
-				resetCoin(i);
+			// Check collision with enlarged 65x70 dimensions
+			if (checkCollision((float)rickshawCordinateX, (float)rickshawCordinateY, (float)rickshawWidth, (float)rickshawHeight,
+				obstacles[i].x - obstacleWidth / 2.0f, obstacles[i].y, (float)obstacleWidth, (float)obstacleHeight)) {
+				gameState = 1;
 			}
 		}
 	}
@@ -589,7 +475,6 @@ int main() {
 	iInitialize(SCREEN_WIDTH, SCREEN_HEIGHT, "Perspective Road View");
 
 	initObstacles();
-	initCoins();
 
 	iSetTimer(60, updateGame);
 
